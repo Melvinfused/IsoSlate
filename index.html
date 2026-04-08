@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IsoSlate - Course Player</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Fallback if Segoe UI isn't fully available, but on Windows it usually is */
+    </style>
+</head>
+<body>
+    <div id="titlebar">
+        <div class="drag-region">IsoSlate</div>
+        <div class="window-controls">
+            <button id="btn-win-min" class="win-btn mdl2">&#xE921;</button>
+            <button id="btn-win-max" class="win-btn mdl2">&#xE922;</button>
+            <button id="btn-win-close" class="win-btn win-btn-close mdl2">&#xE8BB;</button>
+        </div>
+    </div>
+    
+    <div id="launch-screen" class="screen view-active">
+        <div id="launch-bg-ascii"></div>
+        <div class="launch-content">
+            <h1>Welcome to IsoSlate</h1>
+            <p>Your offline learning hub.</p>
+            <button id="btn-open-course" class="primary-btn">Open Course Folder</button>
+            
+            <div id="recent-courses-container">
+                <h3>My Learning</h3>
+                <div id="recent-courses-list" class="course-tiles">
+                    <!-- Dynamic recent courses -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="player-screen" class="screen">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button id="btn-toggle-sidebar" class="icon-btn mdl2" title="Hide Panel">&#xE112;</button>
+                <h2 id="course-title">Course Title</h2>
+                <button id="btn-close-course" class="icon-btn mdl2" title="Close Course">&#xE106;</button>
+            </div>
+            <div class="sidebar-content" id="sidebar-tree">
+                <!-- Tree will be rendered here -->
+            </div>
+        </div>
+        <div class="main-panel">
+            <div class="video-container" id="video-container">
+                <video id="main-video">
+                    <track id="main-track" kind="subtitles" srclang="en" label="English" default>
+                </video>
+                <div class="video-overlay" id="video-overlay">
+                    <div class="video-header">
+                        <h2 id="current-video-title">Video Title</h2>
+                    </div>
+                    <div class="video-controls-bar">
+                        <div class="controls-left">
+                            <button id="btn-prev" class="mdl2" title="Previous Node">&#xE100;</button>
+                            <button id="btn-play-pause" class="mdl2">&#xE102;</button> <!-- Play -->
+                            <button id="btn-next" class="mdl2" title="Next Node">&#xE101;</button>
+                        </div>
+                        <div class="controls-right">
+                            <select id="playback-speed">
+                                <option value="0.75">0.75x</option>
+                                <option value="1" selected>1x</option>
+                                <option value="1.25">1.25x</option>
+                                <option value="1.5">1.5x</option>
+                                <option value="2">2x</option>
+                            </select>
+                            <button id="btn-cc" style="font-weight:bold;">CC</button>
+                            <button id="btn-fullscreen" class="mdl2">&#xE1D9;</button>
+                        </div>
+                    </div>
+                </div>
+                <button id="btn-show-sidebar" class="icon-btn floating-toggle mdl2" title="Show Panel">&#xE111;</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

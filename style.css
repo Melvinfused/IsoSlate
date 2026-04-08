@@ -1,0 +1,568 @@
+/* Reset and Base Styles */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: "Segoe UI", "Segoe WP", "Open Sans", Helvetica, Arial, sans-serif;
+    background-color: #000000;
+    color: #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#titlebar {
+    display: flex;
+    height: 32px;
+    background-color: #000000;
+    color: #888888;
+    user-select: none;
+    border-bottom: 1px solid #1a1a1a;
+    flex-shrink: 0;
+}
+
+.drag-region {
+    flex: 1;
+    -webkit-app-region: drag;
+    display: flex;
+    align-items: center;
+    padding-left: 16px;
+    font-size: 13px;
+    letter-spacing: 1px;
+    color: #ffffff;
+}
+
+.window-controls {
+    display: flex;
+    -webkit-app-region: no-drag;
+}
+
+.win-btn {
+    width: 46px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    color: #888888;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background-color 0.1s, color 0.1s;
+}
+
+.win-btn.mdl2 {
+    font-size: 10px !important;
+}
+
+.win-btn:hover {
+    background-color: #222222;
+    color: #ffffff;
+}
+
+.win-btn-close:hover {
+    background-color: #e81123;
+    color: #ffffff;
+}
+
+/* Metro Styles */
+::selection {
+    background: #00aba9;
+    color: white;
+}
+
+/* Screens */
+.screen {
+    display: none;
+    height: 100vh;
+    width: 100vw;
+}
+
+.screen.view-active {
+    display: flex;
+}
+
+/* Buttons */
+.primary-btn {
+    background-color: #00aba9;
+    color: white;
+    border: none;
+    padding: 14px 32px;
+    border-radius: 0;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.primary-btn:hover {
+    background-color: #008f8d;
+}
+
+.primary-btn:active {
+    background-color: #00706e;
+    transform: scale(0.98);
+}
+
+.secondary-btn {
+    background-color: transparent;
+    color: #ffffff;
+    border: 1px solid #333333;
+    padding: 8px 16px;
+    border-radius: 0;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.secondary-btn:hover {
+    border-color: #ffffff;
+}
+
+.icon-btn {
+    background: transparent;
+    color: #ffffff;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 24px;
+    font-weight: 300;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: color 0.2s, transform 0.1s;
+}
+
+.mdl2 {
+    font-family: "Segoe MDL2 Assets", "Segoe UI Symbol", sans-serif !important;
+    font-size: 16px !important;
+    font-weight: normal !important;
+}
+
+.icon-btn:hover {
+    background-color: transparent;
+    color: #00aba9;
+}
+
+.icon-btn:active {
+    transform: scale(0.9);
+}
+
+/* Launch Screen */
+#launch-screen {
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    flex: 1;
+    text-align: center;
+    background-color: #000000;
+    position: relative;
+    overflow: hidden;
+}
+
+#launch-bg-ascii {
+    position: absolute;
+    bottom: -15%;
+    right: -15%;
+    font-family: Consolas, monospace;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0;
+    color: #00aba9;
+    opacity: 0.25;
+    white-space: pre;
+    z-index: 0;
+    pointer-events: none;
+    user-select: none;
+    animation: slowSpin 120s linear infinite;
+    transform-origin: center center;
+}
+
+@keyframes slowSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.launch-content {
+    position: relative;
+    z-index: 10;
+    text-align: left;
+    width: 100%;
+    max-width: 800px;
+    padding: 40px;
+}
+
+.launch-content h1 {
+    font-size: 48px;
+    font-weight: 300;
+    margin-bottom: 8px;
+    color: #ffffff;
+    letter-spacing: -1px;
+}
+
+.launch-content p {
+    color: #aaaaaa;
+    margin-bottom: 40px;
+    font-size: 18px;
+}
+
+#recent-courses-container {
+    margin-top: 48px;
+}
+
+#recent-courses-container h3 {
+    font-size: 24px;
+    font-weight: 300;
+    color: #ffffff;
+    margin-bottom: 16px;
+}
+
+/* Player Screen */
+#player-screen {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+}
+
+#player-screen.view-active {
+    display: flex;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 340px;
+    background-color: #000000;
+    border-right: 1px solid #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    transition: margin-left 0.3s ease;
+    flex-shrink: 0; /* ensure it doesn't shrink when main-panel expands */
+}
+
+.sidebar.hidden {
+    margin-left: -340px;
+}
+
+.floating-toggle {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    left: 16px;
+    z-index: 20;
+    background-color: transparent;
+    border-radius: 0;
+    backdrop-filter: none;
+    opacity: 0;
+    pointer-events: none;
+    display: none; /* Only flex when .show is added */
+    transition: opacity 0.3s ease, transform 0.1s;
+}
+
+.floating-toggle:active {
+    transform: translateY(-50%) scale(0.9);
+}
+
+.floating-toggle.show {
+    display: flex;
+}
+
+.video-container.active-overlay .floating-toggle.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.sidebar-header {
+    padding: 24px 20px;
+    background-color: #000000;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #1a1a1a;
+}
+
+.sidebar-header h2 {
+    font-size: 18px;
+    font-weight: 300;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    text-align: center;
+}
+
+.sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 0;
+}
+
+/* Tree Styles */
+.tree-list {
+    font-size: 14px;
+}
+
+.node-header {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s;
+    color: #888888;
+}
+
+.node-header:hover {
+    background-color: #0a0a0a;
+    color: #ffffff;
+}
+
+.node-header.node-module {
+    font-weight: 400;
+    font-size: 24px;
+    color: #ffffff;
+    background-color: #000000;
+    padding-top: 32px;
+    padding-bottom: 24px;
+}
+
+.node-header.node-lesson {
+    padding-left: 20px;
+    font-weight: 300;
+    font-size: 18px;
+    color: #cccccc;
+    border-top: 1px solid #111111;
+}
+
+.node-header.node-video {
+    padding-left: 44px;
+    font-weight: 400;
+    font-size: 14px;
+}
+
+.node-video.active {
+    background-color: #111;
+    color: #00aba9;
+}
+
+.node-header .expander {
+    width: 24px;
+    display: inline-block;
+    font-size: 12px;
+    color: #888888;
+}
+
+.node-header .title {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.node-header .progress {
+    font-size: 12px;
+    color: #888888;
+    margin-left: 8px;
+}
+
+.node-header .icon {
+    width: 24px;
+    display: inline-block;
+    color: #00aba9;
+}
+
+/* Main Panel */
+.main-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: #050505;
+    position: relative;
+    transition: margin-left 0.3s ease;
+}
+
+.video-container {
+    flex: 1;
+    background-color: #000;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+video {
+    width: 100%;
+    height: 100%;
+    outline: none;
+    background: #000;
+}
+
+/* Video Overlay Controls */
+.video-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.8) 100%);
+    pointer-events: none; /* Let clicks pass through to video initially */
+}
+
+.video-container.active-overlay .video-overlay {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.video-header {
+    padding: 24px;
+}
+
+.video-header h2 {
+    font-size: 24px;
+    font-weight: 300;
+    color: #ffffff;
+}
+
+.video-controls-bar {
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.video-controls-bar button {
+    background-color: transparent;
+    color: #ffffff;
+    border: none;
+    cursor: pointer;
+    width: 48px;
+    height: 48px;
+    font-family: "Segoe MDL2 Assets", "Segoe UI Symbol", sans-serif;
+    font-size: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background-color 0.1s;
+    border-radius: 50%;
+}
+
+.video-controls-bar button:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.video-controls-bar button:active {
+    background-color: #00aba9;
+}
+
+.controls-left, .controls-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+select#playback-speed {
+    background-color: transparent;
+    color: #ffffff;
+    border: none;
+    outline: none;
+    padding: 6px 4px;
+    border-radius: 0;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+select#playback-speed option {
+    background-color: #111111;
+    color: #ffffff;
+}
+
+/* Custom Scrollbar for Metro */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+::-webkit-scrollbar-track {
+    background: #111111;
+}
+::-webkit-scrollbar-thumb {
+    background: #333333;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #00aba9;
+}
+
+/* Metro Course Tiles */
+.course-tiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: flex-start;
+    max-height: 260px;
+    overflow-y: auto;
+    /* Invisible scroll setup */
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+}
+
+/* Chrome, Safari, Edge invisible scroll */
+.course-tiles::-webkit-scrollbar {
+    display: none;
+}
+
+.course-tile {
+    width: 200px;
+    height: 120px;
+    background-color: #00aba9;
+    color: #fff;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    cursor: pointer;
+    text-align: left;
+    transition: transform 0.1s, background-color 0.2s;
+}
+
+.course-tile:hover {
+    transform: scale(1.02);
+    background-color: #008f8d;
+}
+
+.course-tile .tile-title {
+    font-size: 16px;
+    font-weight: 400;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.course-tile .tile-stats {
+    font-size: 24px;
+    font-weight: 300;
+}
+
+/* Subtitles Styling */
+video::-webkit-media-text-track-display {
+    transform: translateY(-80px);
+}
+
+::cue {
+    background-color: transparent;
+    text-shadow: 0px 2px 4px rgba(0,0,0,0.8), 0px -2px 4px rgba(0,0,0,0.8), 2px 0px 4px rgba(0,0,0,0.8), -2px 0px 4px rgba(0,0,0,0.8);
+    color: #ffffff;
+    font-family: "Segoe UI", sans-serif;
+    font-size: 1.2rem;
+}
+
