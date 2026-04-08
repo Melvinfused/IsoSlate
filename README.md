@@ -19,3 +19,9 @@ npm start
 # Build a standalone Windows executable (.exe)
 npm run build
 ```
+
+## Project Status
+This is an experimental project exploring ideas and implementation approaches.
+
+## AI Assistance
+AI tools were used to assist with code generation, debugging, and optimisation.
