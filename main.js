@@ -1,24 +1,35 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const CONSTANTS = require('./constants.js');
+
+const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+function log(...args) { if (isDev) console.log(...args); }
+function error(...args) { if (isDev) console.error(...args); }
+
+let mainWindow = null;
 
 function createWindow() {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 720,
     frame: false,
     autoHideMenuBar: true,
+    show: false,
+    icon: path.join(__dirname, 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      // Important to allow loading local media files securely later
-      webSecurity: false 
+      webSecurity: false,
+      contextIsolation: true,
+      nodeIntegration: false
     }
   });
 
   mainWindow.loadFile('index.html');
   
-  // Optionally open dev tools
-  // mainWindow.webContents.openDevTools();
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+  });
 }
 
 app.whenReady().then(() => {
@@ -35,73 +46,69 @@ app.on('window-all-closed', function () {
 
 // Window Controls
 ipcMain.on('window:minimize', (event) => {
-  BrowserWindow.fromWebContents(event.sender).minimize();
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) win.minimize();
 });
 
 ipcMain.on('window:maximize', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  if (win.isMaximized()) {
-    win.unmaximize();
-  } else {
-    win.maximize();
+  if (win) {
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
   }
 });
 
 ipcMain.on('window:close', (event) => {
-  BrowserWindow.fromWebContents(event.sender).close();
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) win.close();
 });
 
-// Register minimal IPC handlers for now
 ipcMain.handle('dialog:openDirectory', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({
     properties: ['openDirectory']
   });
-  if (canceled) {
-    return;
-  } else {
-    return filePaths[0];
-  }
+  return canceled ? null : filePaths[0];
 });
 
 // --- Store Logic ---
-const STORE_PATH = path.join(app.getPath('userData'), 'progress.json');
+const STORE_PATH = path.join(app.getPath('userData'), CONSTANTS.PROGRESS_FILE_NAME);
 
-function readStore() {
+async function writeStoreAsync(data) {
   try {
-    if (!fs.existsSync(STORE_PATH)) {
-      fs.writeFileSync(STORE_PATH, JSON.stringify({}));
-    }
-    const data = fs.readFileSync(STORE_PATH, 'utf-8');
-    return JSON.parse(data);
+    await fs.promises.writeFile(STORE_PATH, JSON.stringify(data, null, 2));
+    return true;
   } catch (err) {
-    console.error('Error reading store', err);
+    error('Error writing store', err);
+    return false;
+  }
+}
+
+ipcMain.handle('store:read', async () => {
+  try {
+    const data = await fs.promises.readFile(STORE_PATH, 'utf-8');
+    return JSON.parse(data);
+  } catch (e) {
     return {};
   }
-}
-
-function writeStore(data) {
-  try {
-    fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 2));
-  } catch (err) {
-    console.error('Error writing store', err);
-  }
-}
-
-ipcMain.handle('store:read', () => {
-  return readStore();
 });
 
-ipcMain.on('store:write', (event, data) => {
-  writeStore(data);
+ipcMain.handle('store:write', async (event, data) => {
+  return await writeStoreAsync(data);
+});
+
+ipcMain.on('store:writeSync', (event, data) => {
+  try {
+    fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 2));
+  } catch(e) { error('Error writing store sync', e); }
 });
 
 // --- File Scanner Logic ---
-const VIDEO_EXTS = ['.mp4', '.mkv', '.webm', '.mov', '.avi'];
-const SUB_EXTS = ['.vtt', '.srt'];
-
 const naturalSort = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 
-function buildTree(currentPath) {
+let courseCache = {};
+let watchers = {};
+
+async function buildTreeAsync(currentPath) {
   let node = {
     name: path.basename(currentPath),
     path: currentPath,
@@ -111,7 +118,7 @@ function buildTree(currentPath) {
 
   let items;
   try {
-    items = fs.readdirSync(currentPath, { withFileTypes: true });
+    items = await fs.promises.readdir(currentPath, { withFileTypes: true });
   } catch (err) {
     return node;
   }
@@ -126,17 +133,19 @@ function buildTree(currentPath) {
       dirs.push(item.name);
     } else {
       const ext = path.extname(item.name).toLowerCase();
-      if (VIDEO_EXTS.includes(ext)) mediaFiles.push(item.name);
-      else if (SUB_EXTS.includes(ext)) subFiles.push(item.name);
+      if (CONSTANTS.VIDEO_EXTS.includes(ext)) mediaFiles.push(item.name);
+      else if (CONSTANTS.SUB_EXTS.includes(ext)) subFiles.push(item.name);
     }
   });
 
   dirs.sort(naturalSort);
   mediaFiles.sort(naturalSort);
 
-  dirs.forEach(d => {
-    const childNode = buildTree(path.join(currentPath, d));
-    // Only include directories that actually contain videos eventually
+  const childNodes = await Promise.all(
+    dirs.map(async d => await buildTreeAsync(path.join(currentPath, d)))
+  );
+
+  childNodes.forEach(childNode => {
     if (childNode.children && childNode.children.length > 0) {
       node.children.push(childNode);
     }
@@ -170,21 +179,41 @@ function buildTree(currentPath) {
 
 ipcMain.handle('fs:scanDirectory', async (event, rootPath) => {
   try {
-    if (!fs.existsSync(rootPath)) return null;
-    return buildTree(rootPath);
+    try {
+      await fs.promises.access(rootPath);
+    } catch(e) { return null; }
+
+    if (courseCache[rootPath]) return courseCache[rootPath];
+
+    const tree = await buildTreeAsync(rootPath);
+    courseCache[rootPath] = tree;
+
+    if (!watchers[rootPath]) {
+      try {
+        watchers[rootPath] = fs.watch(rootPath, { recursive: true }, (eventType, filename) => {
+          delete courseCache[rootPath];
+          if (watchers[rootPath]) {
+            watchers[rootPath].close();
+            delete watchers[rootPath];
+          }
+        });
+      } catch (err) {
+        error("Could not mount watcher", err);
+      }
+    }
+
+    return tree;
   } catch (err) {
-    console.error('Scan error:', err);
+    error('Scan error:', err);
     return null;
   }
 });
 
-// Read file contents (useful for .srt parsing in renderer)
 ipcMain.handle('fs:readFile', async (event, filePath) => {
   try {
-    return fs.readFileSync(filePath, 'utf-8');
+    return await fs.promises.readFile(filePath, 'utf-8');
   } catch (err) {
-    console.error('Play error:', err);
+    error('Read error:', err);
     return null;
   }
 });
-

@@ -11,6 +11,7 @@
 </head>
 <body>
     <div id="titlebar">
+        <img src="logo_cropped.png" alt="IsoSlate Logo" class="titlebar-logo">
         <div class="drag-region">IsoSlate</div>
         <div class="window-controls">
             <button id="btn-win-min" class="win-btn mdl2">&#xE921;</button>
@@ -51,6 +52,7 @@
                 <video id="main-video">
                     <track id="main-track" kind="subtitles" srclang="en" label="English" default>
                 </video>
+                <video id="preload-video" preload="metadata" style="display: none;"></video>
                 <div class="video-overlay" id="video-overlay">
                     <div class="video-header">
                         <h2 id="current-video-title">Video Title</h2>
@@ -58,7 +60,9 @@
                     <div class="video-controls-bar">
                         <div class="controls-left">
                             <button id="btn-prev" class="mdl2" title="Previous Node">&#xE100;</button>
+                            <button id="btn-skip-back" class="mdl2" title="Skip Back 30s">&#xE973;&#xE973;</button>
                             <button id="btn-play-pause" class="mdl2">&#xE102;</button> <!-- Play -->
+                            <button id="btn-skip-forward" class="mdl2" title="Skip Forward 30s">&#xE974;&#xE974;</button>
                             <button id="btn-next" class="mdl2" title="Next Node">&#xE101;</button>
                         </div>
                         <div class="controls-right">
@@ -79,6 +83,7 @@
         </div>
     </div>
 
+    <script src="constants.js"></script>
     <script src="renderer.js"></script>
 </body>
 </html>

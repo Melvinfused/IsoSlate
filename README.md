@@ -1,6 +1,10 @@
+<p align="center">
+  <img src="logo_cropped.png" width="120" height="120" alt="IsoSlate Logo">
+</p>
+
 # IsoSlate
 
-A sleek, offline Metro-style video course player built with Electron. IsoSlate recursively scans local course directories, auto-links subtitles, and persistently tracks your video viewing progress natively.
+A sleek, premium offline Metro-style video course player built with Electron. IsoSlate recursively scans local course directories, auto-links subtitles, and persistently tracks your video viewing progress natively with an optimized, lightweight architecture.
 
 ## Features
 - **Dynamic Mapping**: Automatically adapts to deep nested module/lesson folders or completely flat localized playlists.

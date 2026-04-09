@@ -23,6 +23,15 @@ body {
     user-select: none;
     border-bottom: 1px solid #1a1a1a;
     flex-shrink: 0;
+    align-items: center;
+}
+
+.titlebar-logo {
+    width: 20px;
+    height: 20px;
+    margin-left: 10px;
+    -webkit-app-region: drag;
+    object-fit: contain;
 }
 
 .drag-region {
@@ -30,7 +39,7 @@ body {
     -webkit-app-region: drag;
     display: flex;
     align-items: center;
-    padding-left: 16px;
+    padding-left: 12px;
     font-size: 13px;
     letter-spacing: 1px;
     color: #ffffff;
@@ -242,12 +251,16 @@ body {
     display: flex;
     flex-direction: column;
     height: 100%;
-    transition: margin-left 0.3s ease;
-    flex-shrink: 0; /* ensure it doesn't shrink when main-panel expands */
+    transition: transform 0.3s ease, min-width 0.3s ease;
+    flex-shrink: 0;
+    min-width: 340px;
+    contain: layout paint;
 }
 
 .sidebar.hidden {
-    margin-left: -340px;
+    transform: translateX(-340px);
+    min-width: 0;
+    width: 0;
 }
 
 .floating-toggle {
@@ -302,6 +315,8 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: 20px 0;
+    contain: content;
+    will-change: transform;
 }
 
 /* Tree Styles */
@@ -385,7 +400,7 @@ body {
     flex-direction: column;
     background-color: #050505;
     position: relative;
-    transition: margin-left 0.3s ease;
+    contain: strict;
 }
 
 .video-container {
@@ -415,7 +430,8 @@ video {
     opacity: 0;
     transition: opacity 0.3s ease;
     background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.8) 100%);
-    pointer-events: none; /* Let clicks pass through to video initially */
+    pointer-events: none; 
+    will-change: opacity;
 }
 
 .video-container.active-overlay .video-overlay {

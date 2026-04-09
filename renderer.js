@@ -3,35 +3,59 @@ let currentProgress = {};
 let activeVideoPath = null;
 let overlayTimeout = null;
 
-// DOM Elements
+const CONST = window.APP_CONSTANTS;
+
 const launchScreen = document.getElementById('launch-screen');
 const playerScreen = document.getElementById('player-screen');
 const sidebarTree = document.getElementById('sidebar-tree');
 const courseTitleEl = document.getElementById('course-title');
 const mainVideo = document.getElementById('main-video');
+const preloadVideo = document.getElementById('preload-video');
 const currentVideoTitle = document.getElementById('current-video-title');
 const mainTrack = document.getElementById('main-track');
 const videoContainer = document.getElementById('video-container');
 const btnPlayPause = document.getElementById('btn-play-pause');
+const btnSkipBack = document.getElementById('btn-skip-back');
+const btnSkipForward = document.getElementById('btn-skip-forward');
 const btnNext = document.getElementById('btn-next');
 const btnPrev = document.getElementById('btn-prev');
 const btnFullscreen = document.getElementById('btn-fullscreen');
 const btnCC = document.getElementById('btn-cc');
+const sidebarEl = document.getElementById('sidebar');
+const btnShowSidebar = document.getElementById('btn-show-sidebar');
+const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
+const bgAsciiEl = document.getElementById('launch-bg-ascii');
 
-// Icons (Segoe MDL2 basic mappings)
 const ICON_PLAY = '&#xE102;';
 const ICON_PAUSE = '&#xE103;';
 
-// Window Controls
-document.getElementById('btn-win-min').addEventListener('click', () => {
-    window.electronAPI.windowMinimize();
+let debounceTimer = null;
+let pendingSave = false;
+function scheduleSave(force = false) {
+    pendingSave = true;
+    if (force) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+        window.electronAPI.writeStore(currentProgress);
+        pendingSave = false;
+    } else if (!debounceTimer) {
+        debounceTimer = setTimeout(() => {
+            if (pendingSave) {
+                window.electronAPI.writeStore(currentProgress);
+                pendingSave = false;
+            }
+            debounceTimer = null;
+        }, CONST.DEBOUNCE_MS);
+    }
+}
+
+window.addEventListener('beforeunload', () => {
+    if (pendingSave) window.electronAPI.writeStoreSync(currentProgress);
 });
-document.getElementById('btn-win-max').addEventListener('click', () => {
-    window.electronAPI.windowMaximize();
-});
-document.getElementById('btn-win-close').addEventListener('click', () => {
-    window.electronAPI.windowClose();
-});
+
+document.getElementById('btn-win-min').addEventListener('click', () => window.electronAPI.windowMinimize());
+document.getElementById('btn-win-max').addEventListener('click', () => window.electronAPI.windowMaximize());
+document.getElementById('btn-win-close').addEventListener('click', () => window.electronAPI.windowClose());
 
 async function init() {
     currentProgress = await window.electronAPI.readStore();
@@ -40,7 +64,6 @@ async function init() {
 }
 
 const asciiChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%&*()_+{}[]|:;"<>,.?/~`';
-const bgAsciiEl = document.getElementById('launch-bg-ascii');
 const asciiRadius = 26; 
 let currentAsciiGrid = [];
 
@@ -72,10 +95,52 @@ function initAsciiCircle() {
             }
         }
         bgAsciiEl.textContent = currentAsciiGrid.map(row => row.join('')).join('\n');
-    }, 150);
+    }, CONST.ASCII_UPDATE_INTERVAL_MS);
 }
 
-async function renderRecentCourses() {
+function countVids(nodes) {
+    let cnt = 0;
+    nodes.forEach(n => {
+        if (n.type === 'video') cnt++;
+        else if (n.type === 'directory') cnt += countVids(n.children);
+    });
+    return cnt;
+}
+
+sidebarTree.addEventListener('click', (e) => {
+    const videoNode = e.target.closest('.node-video');
+    if (videoNode) {
+        const path = videoNode.dataset.path;
+        const videoObj = findVideoByPath(currentCourse.children, path);
+        if (videoObj) playVideo(videoObj, path);
+        return;
+    }
+    
+    const headerNode = e.target.closest('.node-header');
+    if (headerNode && (headerNode.classList.contains('node-lesson') || headerNode.classList.contains('node-module'))) {
+        const parentDir = headerNode.parentNode;
+        const content = parentDir.querySelector('.node-content');
+        if (content) {
+            const isHidden = content.style.display === 'none';
+            content.style.display = isHidden ? 'block' : 'none';
+            const expander = headerNode.querySelector('.expander');
+            if (expander) expander.textContent = isHidden ? '▼' : '▷';
+        }
+    }
+});
+
+function findVideoByPath(nodes, searchPath) {
+    for (let node of nodes) {
+        if (node.type === 'video' && pathRelative(currentCourse.path, node.path) === searchPath) return node;
+        if (node.type === 'directory') {
+            const found = findVideoByPath(node.children, searchPath);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+function renderRecentCourses() {
     const list = document.getElementById('recent-courses-list');
     list.innerHTML = '';
     const paths = Object.keys(currentProgress);
@@ -84,85 +149,53 @@ async function renderRecentCourses() {
         return;
     }
     
+    const frag = document.createDocumentFragment();
     for (const p of paths) {
         const prog = currentProgress[p];
-        
-        // Resolve missing metadata quietly if course still exists
-        if (!prog.__meta || prog.__meta.totalVideos === undefined) {
-            const cData = await window.electronAPI.scanDirectory(p);
-            if (cData && cData.children) {
-                function countVids(nodes) {
-                    let cnt = 0;
-                    nodes.forEach(n => {
-                        if (n.type === 'video') cnt++;
-                        else if (n.type === 'directory') cnt += countVids(n.children);
-                    });
-                    return cnt;
-                }
-                if (!prog.__meta) prog.__meta = {};
-                prog.__meta.totalVideos = countVids(cData.children);
-                // Automatically save the refreshed metadata
-                window.electronAPI.writeStore(currentProgress);
-            }
-        }
-
         const videos = Object.values(prog).filter(v => typeof v === 'object' && v !== null && 'completed' in v);
         const comp = videos.filter(v => v.completed).length;
         
-        let total = prog.__meta && prog.__meta.totalVideos ? prog.__meta.totalVideos : 0;
-        let percent = 0;
-        
-        // Calculate strictly against the total physical files found
-        if (total > 0) {
-            percent = Math.min(Math.round((comp / total) * 100), 100);
-        } else if (videos.length > 0) {
-            // Unlikely fallback if drive is detached 
-            percent = Math.min(Math.round((comp / Math.max(videos.length, 1)) * 100), 100);
-        }
+        let total = prog.__meta && prog.__meta.totalVideos ? prog.__meta.totalVideos : videos.length;
+        let percent = total > 0 ? Math.min(Math.round((comp / total) * 100), 100) : 0;
         
         let labelText = "Start Now";
-        if (percent >= 100) {
-            labelText = "Completed";
-        } else if (percent > 0 || videos.length > 0) {
-            labelText = "In Progress";
-        }
+        if (percent >= 100) labelText = "Completed";
+        else if (percent > 0 || videos.length > 0) labelText = "In Progress";
         
         const folderName = p.split(/[\\/]/).pop();
         
         const tile = document.createElement('div');
         tile.className = 'course-tile';
-        
         tile.innerHTML = `
             <div class="tile-title" title="${folderName}">${folderName}</div>
             <div class="tile-stats">${percent}%</div>
             <div style="font-size: 12px; color: rgba(255,255,255,0.7)">${labelText}</div>
         `;
         tile.onclick = () => loadCourse(p);
-        list.appendChild(tile);
+        frag.appendChild(tile);
     }
+    list.appendChild(frag);
 }
 
 document.getElementById('btn-open-course').addEventListener('click', async () => {
     const dir = await window.electronAPI.openDirectory();
-    if (dir) {
-        await loadCourse(dir);
-    }
+    if (dir) await loadCourse(dir);
 });
 
 document.getElementById('btn-close-course').addEventListener('click', () => {
     launchScreen.classList.add('view-active');
     playerScreen.classList.remove('view-active');
+    
     mainVideo.pause();
-    mainVideo.src = '';
-    mainTrack.src = '';
+    mainVideo.removeAttribute('src');
+    mainVideo.load();
+    preloadVideo.removeAttribute('src');
+    preloadVideo.load();
+    
     currentCourse = null;
     activeVideoPath = null;
     renderRecentCourses();
 });
-
-const sidebarEl = document.getElementById('sidebar');
-const btnShowSidebar = document.getElementById('btn-show-sidebar');
-const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
 
 btnToggleSidebar.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -188,20 +221,11 @@ async function loadCourse(dirPath) {
         currentProgress[dirPath] = {};
     }
 
-    function countVids(nodes) {
-        let cnt = 0;
-        nodes.forEach(n => {
-            if (n.type === 'video') cnt++;
-            else if (n.type === 'directory') cnt += countVids(n.children);
-        });
-        return cnt;
-    }
-
     currentProgress[dirPath].__meta = {
         totalVideos: countVids(courseData.children)
     };
     
-    await saveProgress();
+    scheduleSave(true);
 
     currentCourse = courseData;
     courseTitleEl.textContent = courseData.name;
@@ -212,36 +236,63 @@ async function loadCourse(dirPath) {
     renderSidebar();
 
     const resumeVid = getResumeVideo();
-    if (resumeVid) {
-        playVideo(resumeVid, resumeVid.relPath, false);
-    }
+    if (resumeVid) playVideo(resumeVid, resumeVid.relPath, false);
 }
 
 function getResumeVideo() {
     const list = getFlatPlaylist();
     if (!list || list.length === 0) return null;
     
-    // First, try to find a partially watched video
     let candidate = list.find(v => {
         const p = currentProgress[currentCourse.path][v.relPath];
         return p && p.time > 5 && !p.completed;
     });
     if (candidate) return candidate;
 
-    // Then, find the first fully unwatched video
     candidate = list.find(v => {
         const p = currentProgress[currentCourse.path][v.relPath];
         return !p || !p.completed;
     });
     if (candidate) return candidate;
 
-    // If all completed, return first video
     return list[0];
+}
+
+function renderSidebar() {
+    sidebarTree.innerHTML = '';
+    
+    if (!currentCourse || !currentCourse.children) return;
+
+    const isSingleVideo = currentCourse.children.length === 1 && currentCourse.children[0].type === 'video';
+    
+    if (isSingleVideo) {
+        sidebarEl.classList.add('hidden');
+        sidebarEl.style.display = 'none';
+        btnShowSidebar.style.display = 'none';
+    } else {
+        sidebarEl.style.display = 'flex';
+        btnShowSidebar.style.display = '';
+        
+        const frag = document.createDocumentFragment();
+        const ul = document.createElement('div');
+        ul.className = 'tree-list';
+        renderRecursive(ul, currentCourse.children, 1);
+        frag.appendChild(ul);
+        sidebarTree.appendChild(frag);
+        
+        if (activeVideoPath) {
+            const cssSafePath = activeVideoPath.replace(/\\/g, '\\\\');
+            const activeEl = sidebarTree.querySelector(`.node-video[data-path="${cssSafePath}"]`);
+            if (activeEl) activeEl.classList.add('active');
+        }
+    }
 }
 
 function renderRecursive(container, nodes, depth) {
     let totalVideos = 0;
     let completedVideos = 0;
+
+    const frag = document.createDocumentFragment();
 
     nodes.forEach(node => {
         if (node.type === 'video') {
@@ -258,9 +309,8 @@ function renderRecursive(container, nodes, depth) {
                 <span class="icon vid-icon">${vidProg.completed ? '✔' : ' '}</span>
                 <span class="title">${node.name}</span>
             `;
-            vidEl.onclick = () => playVideo(node, relPath);
             vidEl.dataset.path = relPath;
-            container.appendChild(vidEl);
+            frag.appendChild(vidEl);
         } else if (node.type === 'directory') {
             const dirContainer = document.createElement('div');
             dirContainer.className = depth === 1 ? 'module-node' : 'lesson-node';
@@ -279,64 +329,30 @@ function renderRecursive(container, nodes, depth) {
 
             const content = document.createElement('div');
             content.className = 'node-content';
-            header.onclick = () => {
-                content.style.display = content.style.display === 'none' ? 'block' : 'none';
-                header.querySelector('.expander').textContent = content.style.display === 'none' ? '▷' : '▼';
-            };
-
-            const stats = renderRecursive(content, node.children, depth + 1);
             
+            const stats = renderRecursive(content, node.children, depth + 1);
             progressSpan.textContent = `${stats.completed}/${stats.total}`;
             if (stats.total > 0 && stats.completed === stats.total) header.style.color = '#00aba9';
 
             dirContainer.appendChild(header);
             dirContainer.appendChild(content);
-            container.appendChild(dirContainer);
+            frag.appendChild(dirContainer);
 
             totalVideos += stats.total;
             completedVideos += stats.completed;
         }
     });
 
+    container.appendChild(frag);
     return { total: totalVideos, completed: completedVideos };
 }
 
-function renderSidebar() {
-    sidebarTree.innerHTML = '';
-    
-    if (!currentCourse || !currentCourse.children) return;
-
-    // Check Single Video Mode
-    const isSingleVideo = currentCourse.children.length === 1 && currentCourse.children[0].type === 'video';
-    
-    if (isSingleVideo) {
-        sidebarEl.classList.add('hidden');
-        sidebarEl.style.display = 'none';
-        btnShowSidebar.style.display = 'none';
-    } else {
-        sidebarEl.style.display = 'flex';
-        btnShowSidebar.style.display = '';
-        
-        const ul = document.createElement('div');
-        ul.className = 'tree-list';
-        renderRecursive(ul, currentCourse.children, 1);
-        sidebarTree.appendChild(ul);
-        
-        if (activeVideoPath) {
-            const elList = Array.from(document.querySelectorAll('.node-video'));
-            const activeEl = elList.find(el => el.dataset.path === activeVideoPath);
-            if (activeEl) {
-                activeEl.classList.add('active');
-            }
-        }
-    }
-}
-
 function updateNodeProgressVisuals(vidPath) {
-    const elList = Array.from(document.querySelectorAll('.node-video'));
-    const vidEl = elList.find(el => el.dataset.path === vidPath);
+    const cssSafePath = vidPath.replace(/\\/g, '\\\\');
+    const vidEl = sidebarTree.querySelector(`.node-video[data-path="${cssSafePath}"]`);
     if (vidEl) {
-        vidEl.querySelector('.vid-icon').textContent = '✔';
+        const icon = vidEl.querySelector('.vid-icon');
+        if (icon) icon.textContent = '✔';
     }
 
     if (!currentCourse || !currentCourse.children) return;
@@ -351,25 +367,26 @@ function updateNodeProgressVisuals(vidPath) {
                 const p = currentProgress[currentCourse.path][rel];
                 if (p && p.completed) comp++;
             } else if (node.type === 'directory') {
-                const dirEls = Array.from(containerEl.children).filter(el => el.classList.contains('module-node') || el.classList.contains('lesson-node'));
-                const dirEl = dirEls.find(el => {
-                    const titleEl = el.querySelector(':scope > .node-header > .title');
-                    return titleEl && titleEl.textContent === node.name;
-                });
-                
-                if (dirEl) {
-                    const contentEl = dirEl.querySelector(':scope > .node-content');
-                    const stats = calcDirStats(node.children, contentEl);
-                    const progSpan = dirEl.querySelector(':scope > .node-header > .progress');
-                    if (progSpan) {
-                        progSpan.textContent = `${stats.comp}/${stats.total}`;
-                        const header = dirEl.querySelector(':scope > .node-header');
-                        if (stats.total > 0 && stats.comp === stats.total) {
-                            header.style.color = '#00aba9';
+                const children = Array.from(containerEl.children);
+                for (let el of children) {
+                    if (el.classList.contains('module-node') || el.classList.contains('lesson-node')) {
+                        const titleEl = el.querySelector('.node-header > .title');
+                        if (titleEl && titleEl.textContent === node.name) {
+                            const contentEl = el.querySelector('.node-content');
+                            const stats = calcDirStats(node.children, contentEl);
+                            const progSpan = el.querySelector('.node-header > .progress');
+                            if (progSpan) {
+                                progSpan.textContent = `${stats.comp}/${stats.total}`;
+                                const header = el.querySelector('.node-header');
+                                if (stats.total > 0 && stats.comp === stats.total) {
+                                    header.style.color = '#00aba9';
+                                }
+                            }
+                            total += stats.total;
+                            comp += stats.comp;
+                            break;
                         }
                     }
-                    total += stats.total;
-                    comp += stats.comp;
                 }
             }
         });
@@ -377,25 +394,20 @@ function updateNodeProgressVisuals(vidPath) {
     }
 
     const treeList = sidebarTree.querySelector('.tree-list');
-    if (treeList) {
-        calcDirStats(currentCourse.children, treeList);
-    }
+    if (treeList) calcDirStats(currentCourse.children, treeList);
 }
 
 function pathRelative(base, target) {
     return target.replace(base, '').replace(/^[\\\/]/, '').replace(/\\/g, '/');
 }
 
-async function saveProgress() {
-    await window.electronAPI.writeStore(currentProgress);
-}
-
 function playVideo(videoObj, relativePath, autoplay = true) {
-    document.querySelectorAll('.node-video').forEach(el => el.classList.remove('active'));
+    const activeCurrent = sidebarTree.querySelector('.node-video.active');
+    if (activeCurrent) activeCurrent.classList.remove('active');
     
-    const elList = Array.from(document.querySelectorAll('.node-video'));
-    const activeEl = elList.find(el => el.dataset.path === relativePath);
-    if (activeEl) activeEl.classList.add('active');
+    const cssSafePath = relativePath.replace(/\\/g, '\\\\');
+    const newActive = sidebarTree.querySelector(`.node-video[data-path="${cssSafePath}"]`);
+    if (newActive) newActive.classList.add('active');
     
     activeVideoPath = relativePath;
     currentVideoTitle.textContent = videoObj.name;
@@ -403,13 +415,14 @@ function playVideo(videoObj, relativePath, autoplay = true) {
     const oldTrack = document.getElementById('main-track');
     if (oldTrack) oldTrack.remove();
     
-    // Explicitly disable any ghost textTracks in HTML5
     if (mainVideo.textTracks) {
         for (let i = 0; i < mainVideo.textTracks.length; i++) {
             mainVideo.textTracks[i].mode = 'disabled';
         }
     }
 
+    mainVideo.removeAttribute('src');
+    mainVideo.load();
     mainVideo.src = `file://${videoObj.path.replace(/\\/g, '/')}`;
     
     if (videoObj.subtitlePath) {
@@ -419,9 +432,23 @@ function playVideo(videoObj, relativePath, autoplay = true) {
         btnCC.style.display = 'none';
     }
 
+    preloadNextVideo();
+
     if (autoplay) {
-        // Time is resumed in 'loadedmetadata' listener to ensure duration is known
-        mainVideo.play().catch(e => console.log('Autoplay blocked', e));
+        mainVideo.play().catch(e => console.error('Autoplay blocked', e));
+    }
+}
+
+function preloadNextVideo() {
+    const list = getFlatPlaylist();
+    if (!list) return;
+    const idx = list.findIndex(v => v.relPath === activeVideoPath);
+    if (idx !== -1 && idx < list.length - 1) {
+        const nextVid = list[idx + 1];
+        preloadVideo.src = `file://${nextVid.path.replace(/\\/g, '/')}`;
+    } else {
+        preloadVideo.removeAttribute('src');
+        preloadVideo.load();
     }
 }
 
@@ -447,7 +474,6 @@ async function loadSubtitles(subPath) {
     
     mainVideo.appendChild(newTrack);
     
-    // Ensure display mode takes securely
     setTimeout(() => {
         if (mainVideo.textTracks) {
             for (let i = 0; i < mainVideo.textTracks.length; i++) {
@@ -461,8 +487,7 @@ async function loadSubtitles(subPath) {
 
 function srtToVtt(srt) {
     let vtt = 'WEBVTT\n\n';
-    vtt += srt.replace(/\r\n|\r/g, '\n')
-              .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+    vtt += srt.replace(/\r\n|\r/g, '\n').replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
     return vtt;
 }
 
@@ -472,7 +497,6 @@ mainVideo.addEventListener('loadedmetadata', () => {
     if (!activeVideoPath || !currentCourse) return;
     const vidProg = currentProgress[currentCourse.path][activeVideoPath];
     if (vidProg && vidProg.time) {
-        // If it's basically at the end, restart from 0
         if (vidProg.time >= mainVideo.duration - 2) {
             mainVideo.currentTime = 0;
         } else {
@@ -488,7 +512,7 @@ mainVideo.addEventListener('timeupdate', () => {
     const currentTime = mainVideo.currentTime;
     const duration = mainVideo.duration;
     
-    if (Math.abs(currentTime - lastSaveTime) >= 5) {
+    if (Math.abs(currentTime - lastSaveTime) >= CONST.TIME_UPDATE_THROTTLE_MS / 1000) {
         lastSaveTime = currentTime;
         updateProgress(activeVideoPath, currentTime, duration, false);
     }
@@ -500,12 +524,8 @@ mainVideo.addEventListener('ended', () => {
     playNextVideo();
 });
 
-mainVideo.addEventListener('play', () => {
-    btnPlayPause.innerHTML = ICON_PAUSE;
-});
-mainVideo.addEventListener('pause', () => {
-    btnPlayPause.innerHTML = ICON_PLAY;
-});
+mainVideo.addEventListener('play', () => btnPlayPause.innerHTML = ICON_PAUSE);
+mainVideo.addEventListener('pause', () => btnPlayPause.innerHTML = ICON_PLAY);
 
 function updateProgress(relPath, time, duration, isEnded = false) {
     if (!currentProgress[currentCourse.path]) return;
@@ -517,31 +537,26 @@ function updateProgress(relPath, time, duration, isEnded = false) {
     }
 
     vidProg.time = time;
+    let markCompleted = false;
     
-    if (duration > 0 && (time / duration) >= 0.9 || isEnded) {
+    if (duration > 0 && (time / duration) >= CONST.COMPLETION_THRESHOLD || isEnded) {
         if (!vidProg.completed) {
             vidProg.completed = true;
-            
-            const elList = Array.from(document.querySelectorAll('.node-video'));
-            const vidEl = elList.find(el => el.dataset.path === relPath);
-            if (vidEl) {
-                updateNodeProgressVisuals(relPath);
-            }
+            markCompleted = true;
+            updateNodeProgressVisuals(relPath);
         }
     }
 
-    saveProgress();
+    scheduleSave(markCompleted || isEnded);
 }
 
 function buildFlatPlaylist(nodes) {
     let list = [];
-    nodes.forEach(n => {
-        if (n.type === 'video') {
-            list.push({ ...n, relPath: pathRelative(currentCourse.path, n.path) });
-        } else if (n.type === 'directory') {
-            list = list.concat(buildFlatPlaylist(n.children));
-        }
-    });
+    for (let p=0; p < nodes.length; p++){
+        let n = nodes[p];
+        if (n.type === 'video') list.push({ ...n, relPath: pathRelative(currentCourse.path, n.path) });
+        else if (n.type === 'directory') list = list.concat(buildFlatPlaylist(n.children));
+    }
     return list;
 }
 
@@ -578,13 +593,21 @@ btnPrev.addEventListener('click', (e) => {
     playPrevVideo();
 });
 
+function skipTime(seconds) {
+    if (!mainVideo || isNaN(mainVideo.duration)) return;
+    let newTime = mainVideo.currentTime + seconds;
+    if (newTime < 0) newTime = 0;
+    else if (newTime > mainVideo.duration) newTime = mainVideo.duration;
+    mainVideo.currentTime = newTime;
+}
+
+if (btnSkipBack) btnSkipBack.addEventListener('click', (e) => { e.stopPropagation(); skipTime(-CONST.SKIP_SECONDS); });
+if (btnSkipForward) btnSkipForward.addEventListener('click', (e) => { e.stopPropagation(); skipTime(CONST.SKIP_SECONDS); });
+
 btnPlayPause.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (mainVideo.paused) {
-        mainVideo.play();
-    } else {
-        mainVideo.pause();
-    }
+    if (mainVideo.paused) mainVideo.play();
+    else mainVideo.pause();
 });
 
 btnCC.addEventListener('click', (e) => {
@@ -602,20 +625,15 @@ btnCC.addEventListener('click', (e) => {
 btnFullscreen.addEventListener('click', (e) => {
     e.stopPropagation();
     if (!document.fullscreenElement) {
-        videoContainer.requestFullscreen().catch(err => {
-            console.error(`Error attempting to enable fullscreen: ${err.message}`);
-        });
+        videoContainer.requestFullscreen().catch(() => {});
     } else {
         document.exitFullscreen();
     }
 });
 
 videoContainer.addEventListener('fullscreenchange', () => {
-    if (document.fullscreenElement) {
-        btnFullscreen.innerHTML = '&#xE1D8;'; // Exit Fullscreen
-    } else {
-        btnFullscreen.innerHTML = '&#xE1D9;'; // Enter Fullscreen
-    }
+    if (document.fullscreenElement) btnFullscreen.innerHTML = '&#xE1D8;';
+    else btnFullscreen.innerHTML = '&#xE1D9;';
 });
 
 document.getElementById('playback-speed').addEventListener('change', (e) => {
@@ -623,27 +641,46 @@ document.getElementById('playback-speed').addEventListener('change', (e) => {
     mainVideo.playbackRate = parseFloat(e.target.value);
 });
 
-function srtToVtt(srt) {
-    let vtt = 'WEBVTT\n\n';
-    vtt += srt.replace(/\r\n|\r/g, '\n')
-              .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
-    return vtt;
-}
+document.addEventListener('keydown', (e) => {
+    const activeEl = document.activeElement;
+    if (activeEl && ['INPUT', 'SELECT', 'TEXTAREA'].includes(activeEl.tagName) || activeEl.isContentEditable) {
+        return;
+    }
+    
+    if (!playerScreen.classList.contains('view-active')) return;
 
-// Overlay Autohide Logic
+    switch (e.code) {
+        case 'Space':
+            e.preventDefault();
+            if (mainVideo.paused) mainVideo.play();
+            else mainVideo.pause();
+            break;
+        case 'ArrowLeft':
+            e.preventDefault();
+            skipTime(e.shiftKey ? -CONST.SKIP_SECONDS_MODIFIER : -CONST.SKIP_SECONDS);
+            showOverlay();
+            break;
+        case 'ArrowRight':
+            e.preventDefault();
+            skipTime(e.shiftKey ? CONST.SKIP_SECONDS_MODIFIER : CONST.SKIP_SECONDS);
+            showOverlay();
+            break;
+    }
+});
+
 function showOverlay() {
     videoContainer.classList.add('active-overlay');
     clearTimeout(overlayTimeout);
     overlayTimeout = setTimeout(() => {
-        if (!mainVideo.paused) { // only hide if playing
+        if (!mainVideo.paused) {
             videoContainer.classList.remove('active-overlay');
         }
-    }, 2500);
+    }, CONST.OVERLAY_TIMEOUT_MS);
 }
 
 videoContainer.addEventListener('mousemove', showOverlay);
 videoContainer.addEventListener('click', showOverlay);
-mainVideo.addEventListener('pause', showOverlay); // keep open while paused
+mainVideo.addEventListener('pause', showOverlay);
 mainVideo.addEventListener('play', showOverlay);
 
 init();
